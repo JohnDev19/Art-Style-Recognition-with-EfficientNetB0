@@ -296,17 +296,16 @@ elif page == "🎓 Train Model":
     if st.button("🚀 Start Training", type="primary"):
         try:
             with st.spinner("Preparing dataset..."):
-                # get class names from directory
-                class_names = sorted([d for d in os.listdir(DATASET_DIR) 
+                # get class names from directory for counting
+                class_names_temp = sorted([d for d in os.listdir(DATASET_DIR) 
                                     if os.path.isdir(os.path.join(DATASET_DIR, d))])
-                st.session_state.class_names = class_names
                 
                 # count total images
                 total_images = sum(len([f for f in os.listdir(os.path.join(DATASET_DIR, c)) 
                                        if f.endswith(('.png', '.jpg', '.jpeg'))]) 
-                                  for c in class_names)
+                                  for c in class_names_temp)
                 
-                st.success(f"Found {total_images} images across {len(class_names)} classes")
+                st.success(f"Found {total_images} images across {len(class_names_temp)} classes")
                 st.info(f"Using memory-efficient streaming from disk")
             
             # create datasets directly from directory (memory efficient)
@@ -314,13 +313,16 @@ elif page == "🎓 Train Model":
                 DATASET_DIR,
                 labels='inferred',
                 label_mode='int',
-                class_names=class_names,
                 color_mode='rgb',
                 batch_size=None,
                 image_size=(IMG_SIZE, IMG_SIZE),
                 shuffle=True,
                 seed=42
             )
+            
+            # get class names from dataset
+            class_names = full_dataset.class_names
+            st.session_state.class_names = class_names
             
             # split into train and validation
             total_size = total_images
