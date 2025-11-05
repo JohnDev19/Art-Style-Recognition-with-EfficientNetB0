@@ -180,5 +180,4 @@ For faster development:
 ## Additional Resources
 
 - [VS Code Python Tutorial](https://code.visualstudio.com/docs/python/python-tutorial)
-- [Streamlit Documentation](https://docs.streamlit.io)
 - [TensorFlow Guide](https://www.tensorflow.org/guide)
