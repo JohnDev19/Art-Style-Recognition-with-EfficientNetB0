@@ -51,51 +51,9 @@ A deep learning application that uses transfer learning with EfficientNetB0 to c
 
 ## Getting Started
 
-### On Replit
-
-1. Click the "Run" button at the top of the Replit interface
-2. The Streamlit app will automatically start on port 5000
-3. Navigate through the sidebar to explore different features
-
-### Local Development
-
-#### Prerequisites
-
-- Python 3.11 or higher
-- UV package manager (or pip)
-
-#### Installation
-
-1. Clone the repository:
-```bash
-git clone <your-repo-url>
-cd <project-directory>
-```
-
-2. Install dependencies using UV (recommended):
-```bash
-uv sync
-```
-
-Or install UV first if you don't have it:
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync
-```
-
-Alternatively, install from pyproject.toml with pip:
-```bash
-pip install matplotlib numpy pandas pillow scikit-learn seaborn streamlit tensorflow
-```
-
-3. Run the application:
-```bash
-streamlit run app.py --server.port 5000
-```
-
 ### Using VS Code
 
-See [VSCode.md](VSCode.md) for detailed instructions on setting up VS Code with this Replit project via SSH.
+See [VSCode.md](VSCode.md) for detailed instructions on setting up VS Code.
 
 ## Usage Guide
 
