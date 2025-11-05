@@ -1,5 +1,5 @@
 def main():
-    print("Hello from Art Style Recognition with CNNs workspace!")
+    print("Hello from EfficientNetB0 workspace!")
 
 
 if __name__ == "__main__":
