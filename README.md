@@ -2,6 +2,9 @@
 
 A deep learning application that uses transfer learning with EfficientNetB0 to classify artwork into different artistic styles.
 
+![Screenshot Result1](screenshot_result1.jpg)
+![Screenshot Result2](screenshot_result2.jpg)
+
 ## Features
 
 - **Transfer Learning**: Uses pre-trained EfficientNetB0 model for high accuracy
