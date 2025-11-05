@@ -15,12 +15,15 @@ A deep learning application that uses transfer learning with EfficientNetB0 to c
 - **Batch Classification**: Process multiple images at once
 
 ## Supported Art Styles
-
-- 🌅 **Impressionist**: Soft, blended colors and light effects
-- 📐 **Cubist**: Geometric shapes and abstract forms
-- 💭 **Surrealist**: Dreamlike, unusual combinations
-- 🏛️ **Renaissance**: Warm tones and classical composition
-- 🎭 **Abstract**: Bold shapes and vibrant colors
+- 🌅 **Impressionist**
+- 📐 **Cubist**
+- 💭 **Surrealist**
+- 🏛️ **Renaissance**
+- 🎭 **Abstract**
+- 🖼️ **Baroque**
+- 🃏 **Expressionist**
+- 🎨 **Pop Art**
+- ➖ **Minimalist**
 
 ## Project Structure
 
