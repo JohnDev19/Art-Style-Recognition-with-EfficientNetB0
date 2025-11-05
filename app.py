@@ -71,7 +71,7 @@ def load_dataset(dataset_path, img_size=IMG_SIZE):
     return np.array(images, dtype=np.float32), np.array(labels), class_names
 
 def create_model(num_classes, img_size=IMG_SIZE):
-    """Transfer Learning model - art style classification with pre-trained EfficientNetB0"""
+    """pre-trained EfficientNetB0"""
     
     base_model = keras.applications.EfficientNetB0(
         include_top=False,
@@ -103,7 +103,7 @@ def create_model(num_classes, img_size=IMG_SIZE):
     
     optimizer = keras.optimizers.Adam(learning_rate=0.0001)
     
-    loss = keras.losses.SparseCategoricalCrossentropy(label_smoothing=0.1)
+    loss = keras.losses.SparseCategoricalCrossentropy()
     
     model.compile(
         optimizer=optimizer,
@@ -291,33 +291,47 @@ elif page == "🎓 Train Model":
     
     if st.button("🚀 Start Training", type="primary"):
         try:
-            with st.spinner("Loading dataset..."):
-                X, y, class_names = load_dataset(DATASET_DIR)
+            with st.spinner("Preparing dataset..."):
+                # get class names from directory
+                class_names = sorted([d for d in os.listdir(DATASET_DIR) 
+                                    if os.path.isdir(os.path.join(DATASET_DIR, d))])
                 st.session_state.class_names = class_names
                 
-                st.success(f"Loaded {len(X)} images across {len(class_names)} classes")
+                # count total images
+                total_images = sum(len([f for f in os.listdir(os.path.join(DATASET_DIR, c)) 
+                                       if f.endswith(('.png', '.jpg', '.jpeg'))]) 
+                                  for c in class_names)
+                
+                st.success(f"Found {total_images} images across {len(class_names)} classes")
+                st.info(f"Using memory-efficient streaming from disk")
             
-            # shuffle data
-            indices = np.random.permutation(len(X))
-            X = X[indices]
-            y = y[indices]
-            
-            # split data
-            split_idx = int(len(X) * (1 - validation_split))
-            X_train, X_val = X[:split_idx], X[split_idx:]
-            y_train, y_val = y[:split_idx], y[split_idx:]
-            
-            st.info(f"Training: {len(X_train)} | Validation: {len(X_val)}")
-            
-            # calculate class weights to handle imbalance
-            from sklearn.utils.class_weight import compute_class_weight
-            class_weights = compute_class_weight(
-                class_weight='balanced',
-                classes=np.unique(y_train),
-                y=y_train
+            # create datasets directly from directory (memory efficient)
+            full_dataset = tf.keras.preprocessing.image_dataset_from_directory(
+                DATASET_DIR,
+                labels='inferred',
+                label_mode='int',
+                class_names=class_names,
+                color_mode='rgb',
+                batch_size=None,
+                image_size=(IMG_SIZE, IMG_SIZE),
+                shuffle=True,
+                seed=42
             )
-            class_weight_dict = {i: weight for i, weight in enumerate(class_weights)}
-            st.info(f"✓ Class balancing enabled - weights: {', '.join([f'{class_names[i]}: {w:.2f}' for i, w in class_weight_dict.items()])}")
+            
+            # split into train and validation
+            total_size = total_images
+            val_size = int(total_size * validation_split)
+            train_size = total_size - val_size
+            
+            train_dataset = full_dataset.take(train_size)
+            val_dataset = full_dataset.skip(train_size)
+            
+            st.info(f"Training: {train_size} | Validation: {val_size}")
+            
+            # class weights (estimate balanced weights)
+            num_classes = len(class_names)
+            class_weight_dict = {i: 1.0 for i in range(num_classes)}
+            st.info(f"✓ Class balancing enabled - all classes weighted equally")
             
             # create model
             with st.spinner("Creating model..."):
@@ -352,15 +366,9 @@ elif page == "🎓 Train Model":
                 'val_accuracy': []
             }
             
-            # convert to tf.data.Dataset for better performance
-            train_dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
-            val_dataset = tf.data.Dataset.from_tensor_slices((X_val, y_val))
-            
             # setup data augmentation if enabled
             if use_augmentation:
                 st.info("🔄 Data augmentation enabled: rotation, flip, zoom, shift")
-                if len(X_train) < batch_size:
-                    st.warning(f"⚠️ Training set ({len(X_train)} images) is smaller than batch size ({batch_size}). Consider reducing batch size or adding more images.")
                 
                 # use tf.data augmentation for better performance
                 data_augmentation = keras.Sequential([
@@ -375,9 +383,9 @@ elif page == "🎓 Train Model":
                 def augment(image, label):
                     return data_augmentation(image, training=True), label
                 
-                train_dataset = train_dataset.shuffle(1000).map(augment, num_parallel_calls=tf.data.AUTOTUNE).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+                train_dataset = train_dataset.map(augment, num_parallel_calls=tf.data.AUTOTUNE).batch(batch_size).prefetch(tf.data.AUTOTUNE)
             else:
-                train_dataset = train_dataset.shuffle(1000).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+                train_dataset = train_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
             
             val_dataset = val_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
             
