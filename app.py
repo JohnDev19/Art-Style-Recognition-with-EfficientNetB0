@@ -59,7 +59,7 @@ def load_dataset(dataset_path, img_size=IMG_SIZE):
             try:
                 img = Image.open(img_path).convert('RGB')
                 img = img.resize((img_size, img_size))
-                img_array = np.array(img) / 255.0
+                img_array = np.array(img, dtype=np.float32)
                 images.append(img_array)
                 labels.append(class_idx)
             except Exception as e:
@@ -68,63 +68,87 @@ def load_dataset(dataset_path, img_size=IMG_SIZE):
     if len(images) == 0:
         raise ValueError("No images could be loaded from the dataset. Please check your image files.")
     
-    return np.array(images), np.array(labels), class_names
+    return np.array(images, dtype=np.float32), np.array(labels), class_names
 
 def create_model(num_classes, img_size=IMG_SIZE):
-    """CNN model - art style classification"""
-    model = keras.Sequential([
-        layers.Input(shape=(img_size, img_size, 3)),
-        
-        # 1st convolutional block
-        layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
-        layers.BatchNormalization(),
-        layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
-        layers.MaxPooling2D((2, 2)),
-        layers.Dropout(0.25),
-        
-        # 2nd convolutional block
-        layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
-        layers.BatchNormalization(),
-        layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
-        layers.MaxPooling2D((2, 2)),
-        layers.Dropout(0.25),
-        
-        # 3rd convolutional block
-        layers.Conv2D(128, (3, 3), activation='relu', padding='same'),
-        layers.BatchNormalization(),
-        layers.Conv2D(128, (3, 3), activation='relu', padding='same'),
-        layers.MaxPooling2D((2, 2)),
-        layers.Dropout(0.25),
-        
-        # dense layers
-        layers.Flatten(),
-        layers.Dense(256, activation='relu'),
-        layers.BatchNormalization(),
-        layers.Dropout(0.5),
-        layers.Dense(128, activation='relu'),
-        layers.Dropout(0.5),
-        layers.Dense(num_classes, activation='softmax')
-    ])
+    """Transfer Learning model - art style classification with pre-trained EfficientNetB0"""
+    
+    base_model = keras.applications.EfficientNetB0(
+        include_top=False,
+        weights='imagenet',
+        input_shape=(img_size, img_size, 3),
+        pooling='avg'
+    )
+    
+    base_model.trainable = True
+    for layer in base_model.layers[:-20]:
+        layer.trainable = False
+    
+    inputs = keras.Input(shape=(img_size, img_size, 3))
+    
+    x = keras.applications.efficientnet.preprocess_input(inputs)
+    
+    x = base_model(x, training=True)
+    
+    x = layers.Dropout(0.3)(x)
+    x = layers.Dense(512, activation='relu', kernel_regularizer=keras.regularizers.l2(0.0001))(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.5)(x)
+    x = layers.Dense(256, activation='relu', kernel_regularizer=keras.regularizers.l2(0.0001))(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.4)(x)
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
+    
+    model = keras.Model(inputs, outputs)
+    
+    optimizer = keras.optimizers.Adam(learning_rate=0.0001)
+    
+    loss = keras.losses.SparseCategoricalCrossentropy(label_smoothing=0.1)
     
     model.compile(
-        optimizer='adam',
-        loss='sparse_categorical_crossentropy',
+        optimizer=optimizer,
+        loss=loss,
         metrics=['accuracy']
     )
     
     return model
 
-def predict_image(model, image, class_names):
+def predict_image(model, image, class_names, use_tta=True):
+    """optional Test-Time Augmentation"""
     if isinstance(image, Image.Image):
         img = image.resize((IMG_SIZE, IMG_SIZE))
-        img_array = np.array(img) / 255.0
+        img_array = np.array(img, dtype=np.float32)
     else:
         img_array = image
     
-    img_array = np.expand_dims(img_array, axis=0)
-    predictions = model.predict(img_array, verbose=0)
+    if use_tta:
+        predictions_list = []
+        
+        # original image
+        img_batch = np.expand_dims(img_array, axis=0)
+        predictions_list.append(model.predict(img_batch, verbose=0)[0])
+        
+        # horizontal flip
+        img_flipped = np.flip(img_array, axis=1)
+        img_batch = np.expand_dims(img_flipped, axis=0)
+        predictions_list.append(model.predict(img_batch, verbose=0)[0])
+        
+        # brightness variations
+        img_bright = np.clip(img_array * 1.1, 0, 255)
+        img_batch = np.expand_dims(img_bright, axis=0)
+        predictions_list.append(model.predict(img_batch, verbose=0)[0])
+        
+        img_dark = np.clip(img_array * 0.9, 0, 255)
+        img_batch = np.expand_dims(img_dark, axis=0)
+        predictions_list.append(model.predict(img_batch, verbose=0)[0])
+        
+        # Alaverage all predictions
+        predictions = np.mean(predictions_list, axis=0)
+    else:
+        img_batch = np.expand_dims(img_array, axis=0)
+        predictions = model.predict(img_batch, verbose=0)[0]
     
-    return predictions[0]
+    return predictions
 
 # sidebar
 st.sidebar.title("🎨 Art Style Classifier")
@@ -139,7 +163,8 @@ if page == "🏠 Home":
     st.markdown("### Identify Art Styles with Deep Learning")
     
     st.markdown("""
-    This application uses a Convolutional Neural Network (CNN) to classify artwork into different artistic styles.
+    This application uses **Transfer Learning with EfficientNetB0** to achieve high-accuracy art style classification.
+    The model is pre-trained on ImageNet and fine-tuned on artistic styles for superior performance.
     
     **Supported Art Styles:**
     - 🌅 **Impressionist**: Soft, blended colors and light effects
@@ -149,9 +174,11 @@ if page == "🏠 Home":
     - 🎭 **Abstract**: Bold shapes and vibrant colors
     
     **Features:**
-    - ✅ Real-time model training with progress tracking
+    - ✅ Transfer learning for maximum accuracy
+    - ✅ Class balancing to prevent prediction bias
+    - ✅ Adaptive learning rate for optimal training
+    - ✅ Real-time training progress with fast visualization
     - ✅ Upload and classify your own artwork
-    - ✅ Visualize training metrics and performance
     - ✅ Save and load trained models
     - ✅ Batch image classification
     
@@ -162,7 +189,7 @@ if page == "🏠 Home":
     4. 📊 Analyze model performance
     """)
     
-    # Display dataset info
+    # dataset info
     if os.path.exists(DATASET_DIR):
         st.markdown("### 📊 Current Dataset")
         cols = st.columns(5)
@@ -282,6 +309,16 @@ elif page == "🎓 Train Model":
             
             st.info(f"Training: {len(X_train)} | Validation: {len(X_val)}")
             
+            # calculate class weights to handle imbalance
+            from sklearn.utils.class_weight import compute_class_weight
+            class_weights = compute_class_weight(
+                class_weight='balanced',
+                classes=np.unique(y_train),
+                y=y_train
+            )
+            class_weight_dict = {i: weight for i, weight in enumerate(class_weights)}
+            st.info(f"✓ Class balancing enabled - weights: {', '.join([f'{class_names[i]}: {w:.2f}' for i, w in class_weight_dict.items()])}")
+            
             # create model
             with st.spinner("Creating model..."):
                 model = create_model(len(class_names))
@@ -292,9 +329,15 @@ elif page == "🎓 Train Model":
             
             progress_bar = st.progress(0)
             status_text = st.empty()
-            metrics_placeholder = st.empty()
             
-            # xreate containers - real-time plots
+            # pre-create metric columns outside loop
+            metric_cols = st.columns(4)
+            metric_loss = metric_cols[0].empty()
+            metric_val_loss = metric_cols[1].empty()
+            metric_acc = metric_cols[2].empty()
+            metric_val_acc = metric_cols[3].empty()
+            
+            # create containers for charts
             col1, col2 = st.columns(2)
             with col1:
                 loss_chart = st.empty()
@@ -309,42 +352,52 @@ elif page == "🎓 Train Model":
                 'val_accuracy': []
             }
             
+            # convert to tf.data.Dataset for better performance
+            train_dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
+            val_dataset = tf.data.Dataset.from_tensor_slices((X_val, y_val))
+            
             # setup data augmentation if enabled
             if use_augmentation:
                 st.info("🔄 Data augmentation enabled: rotation, flip, zoom, shift")
                 if len(X_train) < batch_size:
                     st.warning(f"⚠️ Training set ({len(X_train)} images) is smaller than batch size ({batch_size}). Consider reducing batch size or adding more images.")
                 
-                datagen = tf.keras.preprocessing.image.ImageDataGenerator(
-                    rotation_range=20,
-                    width_shift_range=0.2,
-                    height_shift_range=0.2,
-                    horizontal_flip=True,
-                    zoom_range=0.2,
-                    fill_mode='nearest'
-                )
-                datagen.fit(X_train)
+                # use tf.data augmentation for better performance
+                data_augmentation = keras.Sequential([
+                    layers.RandomFlip("horizontal"),
+                    layers.RandomRotation(0.15),
+                    layers.RandomZoom(0.15),
+                    layers.RandomTranslation(0.1, 0.1),
+                    layers.RandomContrast(0.2),
+                    layers.RandomBrightness(0.2),
+                ])
+                
+                def augment(image, label):
+                    return data_augmentation(image, training=True), label
+                
+                train_dataset = train_dataset.shuffle(1000).map(augment, num_parallel_calls=tf.data.AUTOTUNE).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+            else:
+                train_dataset = train_dataset.shuffle(1000).batch(batch_size).prefetch(tf.data.AUTOTUNE)
             
-            # train model
+            val_dataset = val_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+            
+            # train model with learning rate scheduling
+            update_interval = max(1, epochs // 10)
+            best_val_loss = float('inf')
+            best_val_acc = 0.0
+            patience_counter = 0
+            reduce_lr_patience = 3
+            best_model_weights = None
+            
             for epoch in range(epochs):
-                # train one epoch
-                if use_augmentation:
-                    steps = max(1, math.ceil(len(X_train) / batch_size))
-                    h = model.fit(
-                        datagen.flow(X_train, y_train, batch_size=batch_size),
-                        steps_per_epoch=steps,
-                        epochs=1,
-                        validation_data=(X_val, y_val),
-                        verbose=0
-                    )
-                else:
-                    h = model.fit(
-                        X_train, y_train,
-                        batch_size=batch_size,
-                        epochs=1,
-                        validation_data=(X_val, y_val),
-                        verbose=0
-                    )
+                # train one epoch with class balancing
+                h = model.fit(
+                    train_dataset,
+                    epochs=1,
+                    validation_data=val_dataset,
+                    class_weight=class_weight_dict,
+                    verbose=0
+                )
                 
                 # update history
                 history['loss'].append(h.history['loss'][0])
@@ -352,49 +405,71 @@ elif page == "🎓 Train Model":
                 history['accuracy'].append(h.history['accuracy'][0])
                 history['val_accuracy'].append(h.history['val_accuracy'][0])
                 
+                # save best model weights
+                current_val_acc = history['val_accuracy'][-1]
+                current_val_loss = history['val_loss'][-1]
+                
+                if current_val_acc > best_val_acc or (current_val_acc == best_val_acc and current_val_loss < best_val_loss):
+                    best_val_acc = current_val_acc
+                    best_val_loss = current_val_loss
+                    best_model_weights = model.get_weights()
+                    patience_counter = 0
+                else:
+                    patience_counter += 1
+                    
+                if patience_counter >= reduce_lr_patience and epoch < epochs - 5:
+                    old_lr = float(keras.backend.get_value(model.optimizer.learning_rate))
+                    new_lr = old_lr * 0.5
+                    keras.backend.set_value(model.optimizer.learning_rate, new_lr)
+                    patience_counter = 0
+                    st.info(f"📉 Reducing learning rate to {new_lr:.6f}")
+                
                 # update progress
                 progress = (epoch + 1) / epochs
                 progress_bar.progress(progress)
-                status_text.text(f"Epoch {epoch + 1}/{epochs}")
+                status_text.text(f"Epoch {epoch + 1}/{epochs} - Loss: {history['loss'][-1]:.4f} - Acc: {history['accuracy'][-1]:.4f}")
                 
-                # update metrics
-                with metrics_placeholder.container():
-                    metric_cols = st.columns(4)
-                    metric_cols[0].metric("Loss", f"{history['loss'][-1]:.4f}")
-                    metric_cols[1].metric("Val Loss", f"{history['val_loss'][-1]:.4f}")
-                    metric_cols[2].metric("Accuracy", f"{history['accuracy'][-1]:.4f}")
-                    metric_cols[3].metric("Val Accuracy", f"{history['val_accuracy'][-1]:.4f}")
+                # update metrics (lightweight)
+                metric_loss.metric("Loss", f"{history['loss'][-1]:.4f}")
+                metric_val_loss.metric("Val Loss", f"{history['val_loss'][-1]:.4f}")
+                metric_acc.metric("Accuracy", f"{history['accuracy'][-1]:.4f}")
+                metric_val_acc.metric("Val Accuracy", f"{history['val_accuracy'][-1]:.4f}")
                 
-                # ypdate plots
-                fig_loss, ax_loss = plt.subplots(figsize=(8, 4))
-                ax_loss.plot(history['loss'], label='Training Loss', linewidth=2)
-                ax_loss.plot(history['val_loss'], label='Validation Loss', linewidth=2)
-                ax_loss.set_xlabel('Epoch')
-                ax_loss.set_ylabel('Loss')
-                ax_loss.set_title('Training & Validation Loss')
-                ax_loss.legend()
-                ax_loss.grid(True, alpha=0.3)
-                loss_chart.pyplot(fig_loss)
-                plt.close()
-                
-                fig_acc, ax_acc = plt.subplots(figsize=(8, 4))
-                ax_acc.plot(history['accuracy'], label='Training Accuracy', linewidth=2)
-                ax_acc.plot(history['val_accuracy'], label='Validation Accuracy', linewidth=2)
-                ax_acc.set_xlabel('Epoch')
-                ax_acc.set_ylabel('Accuracy')
-                ax_acc.set_title('Training & Validation Accuracy')
-                ax_acc.legend()
-                ax_acc.grid(True, alpha=0.3)
-                acc_chart.pyplot(fig_acc)
-                plt.close()
+                # update plots only every N epochs or on last epoch (much faster)
+                if (epoch + 1) % update_interval == 0 or epoch == epochs - 1:
+                    import pandas as pd
+                    
+                    # use streamlit native charts (much faster than matplotlib)
+                    loss_df = pd.DataFrame({
+                        'Epoch': list(range(1, len(history['loss']) + 1)),
+                        'Training Loss': history['loss'],
+                        'Validation Loss': history['val_loss']
+                    })
+                    
+                    acc_df = pd.DataFrame({
+                        'Epoch': list(range(1, len(history['accuracy']) + 1)),
+                        'Training Accuracy': history['accuracy'],
+                        'Validation Accuracy': history['val_accuracy']
+                    })
+                    
+                    with col1:
+                        loss_chart.line_chart(loss_df.set_index('Epoch'))
+                    
+                    with col2:
+                        acc_chart.line_chart(acc_df.set_index('Epoch'))
+            
+            # restore best model weights
+            if best_model_weights is not None:
+                model.set_weights(best_model_weights)
+                st.info(f"✨ Restored best model weights (Val Acc: {best_val_acc:.4f}, Val Loss: {best_val_loss:.4f})")
             
             # save history
             st.session_state.training_history = history
             
-            # final evaluation
-            val_loss, val_acc = model.evaluate(X_val, y_val, verbose=0)
+            # final evaluation with best weights
+            val_loss, val_acc = model.evaluate(val_dataset, verbose=0)
             
-            st.success(f"✅ Training Complete! Final Validation Accuracy: {val_acc:.4f}")
+            st.success(f"✅ Training Complete! Best Validation Accuracy: {val_acc:.4f}")
             
             # save model
             model_path = os.path.join(MODEL_DIR, f"model_{datetime.now().strftime('%Y%m%d_%H%M%S')}.keras")
@@ -448,6 +523,7 @@ elif page == "🔍 Classify":
         
         with tab1:
             st.markdown("### Upload Image for Classification")
+            st.info("✨ Using Test-Time Augmentation (TTA) for more robust predictions on 4 image variations")
             
             uploaded_file = st.file_uploader("Choose an image", type=['png', 'jpg', 'jpeg'])
             
