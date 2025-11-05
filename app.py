@@ -167,11 +167,15 @@ if page == "🏠 Home":
     The model is pre-trained on ImageNet and fine-tuned on artistic styles for superior performance.
     
     **Supported Art Styles:**
-    - 🌅 **Impressionist**: Soft, blended colors and light effects
-    - 📐 **Cubist**: Geometric shapes and abstract forms
-    - 💭 **Surrealist**: Dreamlike, unusual combinations
-    - 🏛️ **Renaissance**: Warm tones and classical composition
-    - 🎭 **Abstract**: Bold shapes and vibrant colors
+    - 🌅 **Impressionist**
+    - 📐 **Cubist**
+    - 💭 **Surrealist**
+    - 🏛️ **Renaissance**
+    - 🎭 **Abstract**
+    - 🖼️ **Baroque**
+    - 🃏 **Expressionist**
+    - 🎨 **Pop Art**
+    - ➖ **Minimalist**
     
     **Features:**
     - ✅ Transfer learning for maximum accuracy
@@ -235,7 +239,7 @@ elif page == "📁 Dataset":
                             img_path = os.path.join(class_path, image_files[i + j])
                             with cols[j]:
                                 img = Image.open(img_path)
-                                st.image(img, use_container_width=True)
+                                st.image(img, width='stretch')
             else:
                 st.warning("No dataset found. Please upload images.")
         else:
@@ -378,10 +382,11 @@ elif page == "🎓 Train Model":
                     layers.RandomTranslation(0.1, 0.1),
                     layers.RandomContrast(0.2),
                     layers.RandomBrightness(0.2),
-                ])
+                ], name='data_augmentation')
                 
                 def augment(image, label):
-                    return data_augmentation(image, training=True), label
+                    augmented_image = data_augmentation(image, training=True)
+                    return augmented_image, label
                 
                 train_dataset = train_dataset.map(augment, num_parallel_calls=tf.data.AUTOTUNE).batch(batch_size).prefetch(tf.data.AUTOTUNE)
             else:
@@ -541,7 +546,7 @@ elif page == "🔍 Classify":
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.image(image, caption="Uploaded Image", use_container_width=True)
+                    st.image(image, caption="Uploaded Image", width='stretch')
                 
                 with col2:
                     with st.spinner("Classifying..."):
@@ -611,7 +616,7 @@ elif page == "🔍 Classify":
                             if i + j < len(results):
                                 result = results[i + j]
                                 with cols[j]:
-                                    st.image(result['image'], use_container_width=True)
+                                    st.image(result['image'], width='stretch')
                                     st.markdown(f"**{result['predicted_class']}**")
                                     st.markdown(f"Confidence: {result['confidence']:.1f}%")
 
