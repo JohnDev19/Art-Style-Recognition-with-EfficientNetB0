@@ -5,7 +5,7 @@ A deep learning application that uses transfer learning with EfficientNetB0 to c
 ## Features
 
 - **Transfer Learning**: Uses pre-trained EfficientNetB0 model for high accuracy
-- **5 Art Styles**: Classifies Abstract, Cubist, Impressionist, Renaissance, and Surrealist styles
+- **9 Art Styles**: Classifies Abstract, Baroque, Cubist, Expressionist, Impressionist, Minimalist, Pop Art, Renaissance, and Surrealist styles.
 - **Interactive Web Interface**: Built with Streamlit for easy use
 - **Data Augmentation**: Improves model robustness with image transformations
 - **Test-Time Augmentation**: Enhanced prediction accuracy
@@ -205,20 +205,12 @@ Contributions are welcome! Please feel free to:
 - Enhance the user interface
 - Fix bugs or add features
 
-## Deployment
-
-To publish your app on Replit:
-1. Click the "Publish" button in Replit
-2. Configure your deployment settings
-3. Your app will be available at `<your-repl-name>.replit.app`
-
 ## Credits
 
-Built with Replit, TensorFlow, and Streamlit.
+TensorFlow, and Streamlit.
 
 ## Support
 
 For issues or questions:
 - Open an issue in the repository
-- Consult the [Replit documentation](https://docs.replit.com)
 - Check [Streamlit documentation](https://docs.streamlit.io)
